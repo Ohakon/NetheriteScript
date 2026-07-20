@@ -1,10 +1,11 @@
 //plain関数からのコマンド出力は許可
 //runtime関数は専用のmcfunctionファイルを持つ
-//非Argumentable引数を持つruntime関数は特殊化される
+//非Argument引数を持つruntime関数は特殊化される
+//publicは省略可
 runtime public function summon_creeper_n_native(int n){
   let nbt=NBT().setPowered(score.boolean.const(true)).setFuse(score.int.const(123)).setExplosionRadius(score.int.const(100));
   for _ in 0..n{
-    summon(entitytype.CREEPER,RelPos(0,0,0),nbt);
+    summon(EntityType.Creeper,RelPos(0,0,0),nbt);
   }
 }
 //:戻り値注釈は省略可
@@ -13,14 +14,14 @@ pure function double(int x):int{
 }
 runtime public function summon_creeper_n_runtime_four_times(score.int n):void{
   for _ in 0..n{
-    summon(entitytype.CREEPER,RelPos(0,0,0),NBT());
+    summon(EntityType.Creeper,RelPos(0,0,0),NBT());
   }
   let i=score.int(0);
   //ネスト関数定義・ラムダ関数でのキャプチャは無条件に許可される（ただし、ラムダ関数を変数に保持したりすることは不可）
   runtime function for_loop(){
     if i!=n{
       //i.ne(n)
-      summon(entitytype.CREEPER,RelPos(0,0,0),NBT());
+      summon(EntityType.Creeper,RelPos(0,0,0),NBT());
       i=i.(SuccRuntime)succ();//i++;
       for_loop();//再帰呼び出しをすると全ローカル変数を上書きすることに注意
     }
@@ -28,14 +29,14 @@ runtime public function summon_creeper_n_runtime_four_times(score.int n):void{
   for_loop();
   let i=score.int(0);//シャドーイングは許可
   while i<n{
-    summon(entitytype.CREEPER,RelPos(0,0,0),NBT());
+    summon(EntityType.Creeper,RelPos(0,0,0),NBT());
     i++;
     continue;//return run function namespace:while_loop相当
     unreachable();//complie-timeの場合はエラー、runtimeの場合はエラーログ出力、中断
   }
   runtime function while_loop(){
     if i<n{
-      summon(entitytype.CREEPER,RelPos(0,0,0),NBT());
+      summon(EntityType.Creeper,RelPos(0,0,0),NBT());
       i++;
       while_loop();
       return;
@@ -43,11 +44,14 @@ runtime public function summon_creeper_n_runtime_four_times(score.int n):void{
     }
   }
   while_loop();
+  //function a(){} コンパイルエラー(runtime内からはplainを呼び出せないため)
+  //plain function a(){} コンパイルエラー
 }
-interface Add<T>{
+// publicは省略可
+public interface Add<T>{
   inline add(self,T rhs):T;
 }
-interface Subtract<T>{
+public interface Subtract<T>{
   inline subtract(self,T rhs):T;
 }
 ...
@@ -72,14 +76,14 @@ public class storage.array<T>where T:Storage{
 }
 //関数の特徴:
 // 呼び出し可能性
-//- runtime関数: runtime関数v plain関数x pure関数v inline関数v unsafe関数v 非Argumentable引数x 再帰v 外部変数書き換えx
-//- plain関数  : runtime関数v plain関数v pure関数v inline関数v unsafe関数v 非Argumentable引数v 再帰v 外部変数書き換えv
-//- pure関数   : runtime関数x plain関数x pure関数v inline関数x unsafe関数v 非Argumentable引数v 再帰v 外部変数書き換えx
-//- inline関数 : runtime関数v plain関数x pure関数v inline関数v unsafe関数v 非Argumentable引数v 再帰x 外部変数書き換えv
-//- unsafe関数 : runtime関数v plain関数v pure関数v inline関数v unsafe関数v 非Argumentable引数v 再帰v 外部変数書き換えv
+//- runtime関数       : runtime関数v plain関数x pure関数v inline関数v unsafe関数v 非Argument引数x 再帰v 外部変数書き換えx
+//- plain関数         : runtime関数v plain関数v pure関数v inline関数v unsafe関数v 非Argument引数v 再帰v 外部変数書き換えv
+//- pure関数          : runtime関数x plain関数x pure関数v inline関数x unsafe関数v 非Argument引数v 再帰v 外部変数書き換えx
+//- inline関数        : runtime関数v plain関数x pure関数v inline関数v unsafe関数v 非Argument引数v 再帰x 外部変数書き換えv
+//- unsafe関数        : runtime関数v plain関数v pure関数v inline関数v unsafe関数v 非Argument引数v 再帰v 外部変数書き換えv
 
-//score.class: Argumentableを1つだけ実装する
-private class score.int implements Argumentable<Self>, Add<Self>, Subtract<Self>, Multiply<Self>, Division<Self>, Added<Self>, Subtracted<Self>, Multiplied<Self>, Divided<Self>,DerefAssign<Self>,SuccRuntime,PredRuntime,Eq<Self>,Gt<Self>,Lt<Self>,Recurse<storage.array<storage.int>>,AsStorage<storage.int>,Score {
+//score.class: Argumentを1つだけ実装する
+private class score.int implements Argument<Self>, Add<Self>, Subtract<Self>, Multiply<Self>, Division<Self>, Added<Self>, Subtracted<Self>, Multiplied<Self>, Divided<Self>,DerefAssign<Self>,SuccRuntime,PredRuntime,Eq<Self>,Gt<Self>,Lt<Self>,Recurse<storage.array<storage.int>>,AsStorage<storage.int>,Score,ExplictCast<storage.int>,ImplictCast<score.byte> {
   ScoreRef ref;
   plain constructor(self,int num){
     self.ref=alloc_score();
@@ -118,13 +122,13 @@ private class score.int implements Argumentable<Self>, Add<Self>, Subtract<Self>
     scoreboard.sub(ref.ref,self.ref);
     return ref;
   }
-  plain (Argumentable)argument_def(Self holder){
+  plain (Argument)argument_def(Self holder){
     holder.ref=alloc_score();
   }
-  inline (Argumentable)argument_pass(Self holder,Self value){
+  inline (Argument)argument_pass(Self holder,Self value){
     scoreboard.copy(holder.ref,value.ref);
   }
-  inline (Argumentable)argument_get(Self holder){
+  inline (Argument)argument_get(Self holder){
     return holder;
   }
   inline (DerefAssign) deref_assign(self,score.int rhs){
@@ -139,7 +143,7 @@ private class score.int implements Argumentable<Self>, Add<Self>, Subtract<Self>
   }
   inline (Eq) eq(self,rhs){
     let ref=alloc_score();
-    execute.store_score(ref,execute.if_score_eq(self.ref,rhs.ref));
+    Execute.store_score(ref,Execute.if_score_eq(self.ref,rhs.ref));
     return score.boolean(ref);
   }
   //関数定義時に１回呼ばれる
@@ -154,7 +158,7 @@ private class score.int implements Argumentable<Self>, Add<Self>, Subtract<Self>
   }
   inline (AsStorage)as_storage(self){
     let ref=alloc_storage();
-    execute.store(ref,||{
+    Execute.store(ref,||{
       freturn self;
     });
     return storage.int{ref:ref};
@@ -162,15 +166,21 @@ private class score.int implements Argumentable<Self>, Add<Self>, Subtract<Self>
   inline (Score)getScoreRef(){
     return self.ref;
   }
+  inline (ExplictCast<storage.int>)cast(self):storage.int{
+    return self.as_storage();
+  }
+  inline (ImplictCast<score.byte>)cast(self):score.byte{
+    return score.byte(self.ref);
+  }
 }
 implements Ne<score.int> for score.int{
   inline ne(self,rhs){
     let ref=alloc_score();
-    execute.store_score(ref,execute.if_score_ne(self.ref,rhs.ref));
+    Execute.store_score(ref,Execute.if_score_ne(self.ref,rhs.ref));
     return score.boolean(ref);
   }
 }
-class storage.int  implements Argumentable<Self>, Add<Self>, Subtract<Self>, Multiply<Self>, Division<Self>, Added<Self>, Subtracted<Self>, Multiplied<Self>, Divided<Self>,DerefAssign<Self>,SuccRuntime,PredRuntime,Eq<Self>,Gt<Self>,Lt<Self>,Recurse<storage.array<storage.int>>,AsScore<score.int>,Storage {
+class storage.int  implements Argument<Self>, Add<Self>, Subtract<Self>, Multiply<Self>, Division<Self>, Added<Self>, Subtracted<Self>, Multiplied<Self>, Divided<Self>,DerefAssign<Self>,SuccRuntime,PredRuntime,Eq<Self>,Gt<Self>,Lt<Self>,Recurse<storage.array<storage.int>>,AsScore<score.int>,Storage {
   StorageRef ref;
   ...
 
@@ -178,8 +188,8 @@ class storage.int  implements Argumentable<Self>, Add<Self>, Subtract<Self>, Mul
     return self.ref;
   }
   inline (AsScore)as_score(self){
-    let ref=alloc_score();
-    execute.store(ref,||{
+    let ref:ScoreRef=alloc_score();
+    Execute.store(ref,||{
       freturn self;
     });
     return runtime.int{ref:ref};
@@ -188,7 +198,18 @@ class storage.int  implements Argumentable<Self>, Add<Self>, Subtract<Self>, Mul
 class score.boolean implements ...{
   ...
 }
-unsafe function alloc_score():ScoreRef{
+class Execute{
+  native inline at(Selector selector,runtime ()=>void func);
+  native inline as(Selector selector,runtime ()=>void func);
+  ...
+}
+//C風の定数enum
+enum EntityType{
+  Creeper,
+  Zombie,
+  Skeleton
+}
+inline function alloc_score():ScoreRef{
   let ref=allocate ScoreRef;
   return ref;
 }
@@ -204,10 +225,19 @@ class ScoreRef implements Allocate{
     
   }
 }
+runtime print_by_color(storage.string color){
+  print_runtime(\c=color`COLORED`);
+}
+runtime evaling(storage.string running){
+  eval(running);
+}
 // plainは省略可
 plain function load(){
-  execute.at(@a,||{
+  Execute.at(@a,||{
     summon_creeper_n_runtime_four_times(score.int(10));
     summon_creeper_n_native(10);
+    evaling("summon husk ~ ~ ~")
   });
+  print_runtime([\bold\red`RED `,\c="c0ffee"\italic=true` COFFEE`,\hover=[\blue`hovered`]` HOVER`,\yellow storage.string("42")]);
+  print_by_color("ff0000");
 }

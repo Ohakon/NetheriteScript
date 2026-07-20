@@ -1,0 +1,22 @@
+{
+  "name": "netheritescript",
+  "version": "1.0.0",
+  "description": "NetheriteScript is a language that generates mcfunction.",
+  "main": "src/main.ts",
+  "scripts": {
+    "run": "tsx src/main.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ohakon/NetheriteScript.git"
+  },
+  "author": "ohakon_fake",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Ohakon/NetheriteScript/issues"
+  },
+  "homepage": "https://github.com/Ohakon/NetheriteScript#readme",
+  "dependencies": {
+    "tsx": "^4.23.1"
+  }
+}
