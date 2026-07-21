@@ -6,5 +6,5 @@ export class Error{
     return this.rangeLen
   }
 }
-export class LanguageSyntaxError extends Error{
+export class LanguageLexerError extends Error{
 }

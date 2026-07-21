@@ -1,27 +1,31 @@
+import std.score.byte;
+module main;
+
 //plain関数からのコマンド出力は許可
 //runtime関数は専用のmcfunctionファイルを持つ
 //非Argument引数を持つruntime関数は特殊化される
 //publicは省略可
-runtime public function summon_creeper_n_native(int n){
+runtime public function summon_creeper_n_native(int n){ //namespace:path/summon_creeper_n_native
   let nbt=NBT().setPowered(score.boolean.const(true)).setFuse(score.int.const(123)).setExplosionRadius(score.int.const(100));
   for _ in 0..n{
-    summon(EntityType.Creeper,RelPos(0,0,0),nbt);
+    summon(EntityTypes.Creeper,RelPos(0,0,0),nbt);
   }
 }
+const creeper:EntityTypes=EntityTypes.creeper;
 //:戻り値注釈は省略可
 pure function double(int x):int{
   return x+x;
 }
 runtime public function summon_creeper_n_runtime_four_times(score.int n):void{
   for _ in 0..n{
-    summon(EntityType.Creeper,RelPos(0,0,0),NBT());
+    summon(creeper,RelPos(0,0,0),NBT());
   }
   let i=score.int(0);
   //ネスト関数定義・ラムダ関数でのキャプチャは無条件に許可される（ただし、ラムダ関数を変数に保持したりすることは不可）
   runtime function for_loop(){
     if i!=n{
       //i.ne(n)
-      summon(EntityType.Creeper,RelPos(0,0,0),NBT());
+      summon(EntityTypes.Creeper,RelPos(0,0,0),NBT());
       i=i.(SuccRuntime)succ();//i++;
       for_loop();//再帰呼び出しをすると全ローカル変数を上書きすることに注意
     }
@@ -29,14 +33,14 @@ runtime public function summon_creeper_n_runtime_four_times(score.int n):void{
   for_loop();
   let i=score.int(0);//シャドーイングは許可
   while i<n{
-    summon(EntityType.Creeper,RelPos(0,0,0),NBT());
+    summon(EntityTypes.Creeper,RelPos(0,0,0),NBT());
     i++;
     continue;//return run function namespace:while_loop相当
     unreachable();//complie-timeの場合はエラー、runtimeの場合はエラーログ出力、中断
   }
   runtime function while_loop(){
     if i<n{
-      summon(EntityType.Creeper,RelPos(0,0,0),NBT());
+      summon(EntityTypes.Creeper,RelPos(0,0,0),NBT());
       i++;
       while_loop();
       return;
@@ -48,10 +52,10 @@ runtime public function summon_creeper_n_runtime_four_times(score.int n):void{
   //plain function a(){} コンパイルエラー
 }
 // publicは省略可
-public interface Add<T>{
+public trait Add<T>{
   inline add(self,T rhs):T;
 }
-public interface Subtract<T>{
+public trait Subtract<T>{
   inline subtract(self,T rhs):T;
 }
 ...
@@ -62,7 +66,14 @@ public class storage.array<T>where T:Storage{
   inline constructor(self){
     self.ref=alloc_storage();
     storage.remove(self.ref);
-    storage.set(self.ref,storage.array<storage.int>([]));
+    storage.set_array<int>(self.ref,[]);
+  }
+  runtime reverse(self){
+    let arr=storage.array();
+    for 0..storage.length_array(self.ref){
+      storage.append(arr.ref,self.pop());
+    }
+    return arr;
   }
   inline push(self,T t){
     storage.append(self.ref,t);
@@ -83,9 +94,9 @@ public class storage.array<T>where T:Storage{
 //- unsafe関数        : runtime関数v plain関数v pure関数v inline関数v unsafe関数v 非Argument引数v 再帰v 外部変数書き換えv
 
 //score.class: Argumentを1つだけ実装する
-private class score.int implements Argument<Self>, Add<Self>, Subtract<Self>, Multiply<Self>, Division<Self>, Added<Self>, Subtracted<Self>, Multiplied<Self>, Divided<Self>,DerefAssign<Self>,SuccRuntime,PredRuntime,Eq<Self>,Gt<Self>,Lt<Self>,Recurse<storage.array<storage.int>>,AsStorage<storage.int>,Score,ExplictCast<storage.int>,ImplictCast<score.byte> {
+private class score.int implements Argument<Self>, Add<Self>, Subtract<Self>, Multiply<Self>, Division<Self>, Added<Self>, Subtracted<Self>, Multiplied<Self>, Divided<Self>,DerefAssign<Self>,SuccRuntime,PredRuntime,Eq<Self>,Gt<Self>,Lt<Self>,Recurse<storage.array<storage.int>>,AsStorage<storage.int>,Score,ExplicitCast<storage.int>,ImplicitCast<score.byte> {
   ScoreRef ref;
-  plain constructor(self,int num){
+  inline constructor(self,int num){
     self.ref=alloc_score();
     *self=num;
   }
@@ -192,7 +203,7 @@ class storage.int  implements Argument<Self>, Add<Self>, Subtract<Self>, Multipl
     Execute.store(ref,||{
       freturn self;
     });
-    return runtime.int{ref:ref};
+    return score.int{ref:ref};
   }
 }
 class score.boolean implements ...{
@@ -203,11 +214,22 @@ class Execute{
   native inline as(Selector selector,runtime ()=>void func);
   ...
 }
-//C風の定数enum
-enum EntityType{
-  Creeper,
-  Zombie,
-  Skeleton
+//定数enum
+enum TestEnum{
+  A,
+  B,
+  C
+}
+//<int>は省略可
+enum TestEnum2<int>{
+  A(1),
+  B(2),
+  C(3)
+}
+enum EntityTypes{
+  Creeper(EntityType("creeper")),
+  Zombie(EntityType("zombie")),
+  Skeleton(EntityType("skeleton"))
 }
 inline function alloc_score():ScoreRef{
   let ref=allocate ScoreRef;
@@ -240,4 +262,5 @@ plain function load(){
   });
   print_runtime([\bold\red`RED `,\c="c0ffee"\italic=true` COFFEE`,\hover=[\blue`hovered`]` HOVER`,\yellow storage.string("42")]);
   print_by_color("ff0000");
+  static_assert(1==1,"math went wrong");
 }
