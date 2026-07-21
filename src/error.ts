@@ -1,5 +1,5 @@
 export class Error{
-  constructor(public rangeMin:number,public rangeLen:number){
+  constructor(public rangeMin:number,public rangeLen:number,public message:string){
 
   }
   length(){

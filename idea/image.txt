@@ -1,5 +1,7 @@
 import std.score.byte;
-module main;
+import ast;
+import compile;
+module main;//import main;でmain.*が使える。function namespace:main/*に出力される
 
 //plain関数からのコマンド出力は許可
 //runtime関数は専用のmcfunctionファイルを持つ
@@ -8,16 +10,17 @@ module main;
 runtime public function summon_creeper_n_native(int n){ //namespace:path/summon_creeper_n_native
   let nbt=NBT().setPowered(score.boolean.const(true)).setFuse(score.int.const(123)).setExplosionRadius(score.int.const(100));
   for _ in 0..n{
-    summon(EntityTypes.Creeper,RelPos(0,0,0),nbt);
+    summon(entity_types.creeper,RelPos(0,0,0),nbt);
   }
 }
-const creeper:EntityTypes=EntityTypes.creeper;
+const creeper:EntityTypes=entity_types.creeper;
 //:戻り値注釈は省略可
 pure function double(int x):int{
   return x+x;
 }
 runtime public function summon_creeper_n_runtime_four_times(score.int n):void{
   for _ in 0..n{
+    //constはruntimeからでも参照可
     summon(creeper,RelPos(0,0,0),NBT());
   }
   let i=score.int(0);
@@ -25,7 +28,7 @@ runtime public function summon_creeper_n_runtime_four_times(score.int n):void{
   runtime function for_loop(){
     if i!=n{
       //i.ne(n)
-      summon(EntityTypes.Creeper,RelPos(0,0,0),NBT());
+      summon(entity_types.creeper,RelPos(0,0,0),NBT());
       i=i.(SuccRuntime)succ();//i++;
       for_loop();//再帰呼び出しをすると全ローカル変数を上書きすることに注意
     }
@@ -33,17 +36,18 @@ runtime public function summon_creeper_n_runtime_four_times(score.int n):void{
   for_loop();
   let i=score.int(0);//シャドーイングは許可
   while i<n{
-    summon(EntityTypes.Creeper,RelPos(0,0,0),NBT());
+    summon(entity_types.creeper,RelPos(0,0,0),NBT());
     i++;
     continue;//return run function namespace:while_loop相当
     unreachable();//complie-timeの場合はエラー、runtimeの場合はエラーログ出力、中断
   }
   runtime function while_loop(){
     if i<n{
-      summon(EntityTypes.Creeper,RelPos(0,0,0),NBT());
+      summon(entity_types.creeper,RelPos(0,0,0),NBT());
       i++;
       while_loop();
       return;
+      let a="_";
       print_runtime("unreachable code at: line xx");
     }
   }
@@ -97,7 +101,7 @@ public class storage.array<T>where T:Storage{
 private class score.int implements Argument<Self>, Add<Self>, Subtract<Self>, Multiply<Self>, Division<Self>, Added<Self>, Subtracted<Self>, Multiplied<Self>, Divided<Self>,DerefAssign<Self>,SuccRuntime,PredRuntime,Eq<Self>,Gt<Self>,Lt<Self>,Recurse<storage.array<storage.int>>,AsStorage<storage.int>,Score,ExplicitCast<storage.int>,ImplicitCast<score.byte> {
   ScoreRef ref;
   inline constructor(self,int num){
-    self.ref=alloc_score();
+    self.ref=allocate ScoreRef;
     *self=num;
   }
   //定数を生成する
@@ -108,13 +112,13 @@ private class score.int implements Argument<Self>, Add<Self>, Subtract<Self>, Mu
     return num2;
   }
   inline (Add)add(self,score.int rhs){
-    let ref=alloc_score();
+    let ref=allocate ScoreRef;
     scoreboard.copy(ref.ref,self.ref);
     scoreboard.add(ref.ref,rhs.ref);
     return ref;
   }
   inline (Subtract)subtract(self,score.int rhs){
-    let ref=alloc_score();
+    let ref=allocate ScoreRef;
     scoreboard.copy(ref.ref,self.ref);
     scoreboard.sub(ref.ref,rhs.ref);
     return ref;
@@ -122,19 +126,19 @@ private class score.int implements Argument<Self>, Add<Self>, Subtract<Self>, Mu
   ...
   //addとadded両方ある場合にはadd優先
   inline (Added)added(self,score.int lhs){
-    let ref=alloc_score();
+    let ref=allocate ScoreRef;
     scoreboard.copy(ref.ref,lhs.ref);
     scoreboard.add(ref.ref,self.ref);
     return ref;
   }
   inline (Subtracted)subtracted(self,score.int lhs){
-    let ref=alloc_score();
+    let ref=allocate ScoreRef;
     scoreboard.copy(ref.ref,lhs.ref);
     scoreboard.sub(ref.ref,self.ref);
     return ref;
   }
   plain (Argument)argument_def(Self holder){
-    holder.ref=alloc_score();
+    holder.ref=allocate ScoreRef;
   }
   inline (Argument)argument_pass(Self holder,Self value){
     scoreboard.copy(holder.ref,value.ref);
@@ -153,7 +157,7 @@ private class score.int implements Argument<Self>, Add<Self>, Subtract<Self>, Mu
     return self-1;
   }
   inline (Eq) eq(self,rhs){
-    let ref=alloc_score();
+    let ref=allocate ScoreRef;
     Execute.store_score(ref,Execute.if_score_eq(self.ref,rhs.ref));
     return score.boolean(ref);
   }
@@ -186,7 +190,7 @@ private class score.int implements Argument<Self>, Add<Self>, Subtract<Self>, Mu
 }
 implements Ne<score.int> for score.int{
   inline ne(self,rhs){
-    let ref=alloc_score();
+    let ref=allocate ScoreRef;
     Execute.store_score(ref,Execute.if_score_ne(self.ref,rhs.ref));
     return score.boolean(ref);
   }
@@ -199,7 +203,7 @@ class storage.int  implements Argument<Self>, Add<Self>, Subtract<Self>, Multipl
     return self.ref;
   }
   inline (AsScore)as_score(self){
-    let ref:ScoreRef=alloc_score();
+    let ref:ScoreRef=allocate ScoreRef;
     Execute.store(ref,||{
       freturn self;
     });
@@ -214,26 +218,44 @@ class Execute{
   native inline as(Selector selector,runtime ()=>void func);
   ...
 }
-//定数enum
+//Rust風enum
 enum TestEnum{
   A,
   B,
   C
 }
-//<int>は省略可
-enum TestEnum2<int>{
-  A(1),
-  B(2),
-  C(3)
+enum TestEnum2{
+  A(int),
+  B(float),
+  C(boolean)
 }
-enum EntityTypes{
-  Creeper(EntityType("creeper")),
-  Zombie(EntityType("zombie")),
-  Skeleton(EntityType("skeleton"))
+runtime enum TestEnum3{
+  A(score.int),
+  B(score.fixed),
+  C(score.boolean)
 }
-inline function alloc_score():ScoreRef{
-  let ref=allocate ScoreRef;
-  return ref;
+runtime function test_enum3(TestEnum3 enum){
+  return match enum{
+    A(num)=>num,
+    B(num)=>(num*num.scale).floor(),
+    C(bool)=>bool?1:0,
+  }
+}
+function test_enum3_exec(){
+  
+}
+/*
+上は下になる
+scoreboard players operation #tmp.1 = #tmp.0
+function namespace:main/test_enum3
+`mcfunction:namespace:main/test_enum3
+scoreboard players 
+`
+*/
+module entity_types{
+  const creeper=EntityType("creeper")
+  const zombie=EntityType("zombie")
+  const skeleton=EntityType("skeleton")
 }
 class ScoreRef implements Allocate{
   string player;
@@ -247,20 +269,103 @@ class ScoreRef implements Allocate{
     
   }
 }
+
+//compile.minecraft_versionはconstなのでruntimeから参照出来てこいつは不要だが例として残しておく
+macro TargetVersion{
+  string version
+}(self,compile.Block body){
+  let op=["<=",">=","==","!=","<",">"].find(|e|self.version.startsWith(e));
+  let target_version=minecraft.versions[self.version.substr(op.length)].datapackVersion;
+  let current_version=minecraft.versions[compile.minecraft_version].datapackVersion;
+  let valid=switch op{
+    "<="=>current_version<=target_version,
+    ">="=>current_version>=target_version,
+    "=="=>current_version==target_version,
+    "!="=>current_version!=target_version,
+    "<"=>current_version<target_version,
+    ">"=>current_version>target_version,
+  };
+  if !valid{
+    body.valid=false;
+  }
+}
+macro DebugPrint{}(self,compile.Function body){
+  body.ast.flat_map_replace_statements(|statement|[#ast.ReplaceAST()[
+    unsafe{print_compile($inner)},
+    $inner,
+    ast.escape_string(statement.to_string())
+  ],statement]);
+}
+macro ast.ReplaceAST{
+  string[] replaceTarget
+}(self,compile.List body) {
+  let template = body.ast.children[0];
+  let holes    = body.ast.children[1];   // 単一 or リスト
+
+  if holes is ast.List {
+    // 複数穴: holes[i] → self.replacements[i]
+    for i in 0..holes.length() {
+      let result = compile.evaluate(self.replaceTarget[i]);
+      let target = holes[i].name;
+      template.flat_map_replace_expressions(
+          |e| e.name == target ? result : e
+      );
+    }
+  } else if holes is ast.Identifier {
+    // 単一穴
+    let result = compile.evaluate(self.replacements);
+    let target = holes.name;
+    template.flat_map_replace_expressions(
+      |e| e.name == target ? result : e
+    );
+  }
+}
+class MyEntity{
+  EntityRef ref;
+  storage.float health{
+    inline get(self){
+      let ref=storage.float(0);
+      storage.copy(ref.ref,self.ref.access_field("Health"));
+      return ref;
+    }
+    inline set(self,storage.float rhs){
+      let ref=storage.float(0);
+      storage.copy(self.ref.access_field("Health"),ref.ref);
+    }
+  }
+}
+inline function alloc_marker(){
+  let uuid=allocate MyMarker;
+  
+}
+class MyMarker implements Allocate{
+  UUID uuid;
+  inline (Allocate)allocate(self,int lives){
+    self.uuid=uuid();
+  }
+  inline (Allocate)drop(self){
+    kill(self.uuid);
+  }
+}
 runtime print_by_color(storage.string color){
-  print_runtime(\c=color`COLORED`);
+  print_runtime(\c=color"COLORED");
 }
 runtime evaling(storage.string running){
   eval(running);
 }
 // plainは省略可
+#Load
 plain function load(){
-  Execute.at(@a,||{
+  Execute.at(@a[tag="123"],||{
     summon_creeper_n_runtime_four_times(score.int(10));
     summon_creeper_n_native(10);
     evaling("summon husk ~ ~ ~")
   });
-  print_runtime([\bold\red`RED `,\c="c0ffee"\italic=true` COFFEE`,\hover=[\blue`hovered`]` HOVER`,\yellow storage.string("42")]);
+  print_runtime([\bold\red"RED ",\c="c0ffee"\italic=true" COFFEE",\hover=[\blue"hovered"]" HOVER",\yellow storage.string("42")]);
   print_by_color("ff0000");
-  static_assert(1==1,"math went wrong");
+  static_assert(1==1,`math(1+1={1+1}) went wrong`);
+  #TargetVersion(">1.20.3")
+  {
+    print_runtime(">1.20.3")
+  }
 }

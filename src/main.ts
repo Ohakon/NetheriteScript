@@ -1,3 +1,333 @@
 import * as lexer from "./lexer.ts"
 
-console.log(new lexer.Lexer("1 \\red`as{d\\n}asd` ++ 1").lexing())
+console.log(new lexer.Lexer(`import std.score.byte;
+import ast;
+import compile;
+module main;//import main;でmain.*が使える
+
+macro TargetVersion{
+  string version
+}(self,compile.Block body){
+  let op=["<=",">=","==","!=","<",">"].find(|e|self.version.startsWith(e));
+  let target_version=minecraft.versions[self.version.substr(op.length)].datapackVersion;
+  let current_version=minecraft.versions[compile.minecraft_version].datapackVersion;
+  let valid=switch op{
+    "<="=>current_version<=target_version,
+    ">="=>current_version>=target_version,
+    "=="=>current_version==target_version,
+    "!="=>current_version!=target_version,
+    "<"=>current_version<target_version,
+    ">"=>current_version>target_version,
+  };
+  if !valid{
+    body.valid=false;
+  }
+}
+macro DebugPrint{}(self,compile.Function body){
+  body.ast.flat_map_replace_statements(|statement|[#ast.ReplaceAST()[
+    unsafe{print_compile($inner)},
+    $inner,
+    ast.escape_string(statement.to_string())
+  ],statement]);
+}
+macro ast.ReplaceAST{
+  string[] replaceTarget
+}(self,compile.List body) {
+    let template = body.ast.children[0];
+    let holes    = body.ast.children[1];   // 単一 or リスト
+
+    if holes is ast.List {
+        // 複数穴: holes[i] → replacements[i]
+        for i in 0..holes.length() {
+            let result = compile.evaluate(replacements[i]);
+            let target = holes[i].name;
+            template.flat_map_replace_expressions(
+                |e| e.name == target ? result : e
+            );
+        }
+    } else {
+        // 単一穴
+        let result = compile.evaluate(replacements);
+        let target = holes.name;
+        template.flat_map_replace_expressions(
+            |e| e.name == target ? result : e
+        );
+    }
+}
+macro RepeatN{
+  int n,
+  ast.Node node
+}(self){
+  return ast.Block(list.repeat(node,n))
+}
+
+//plain関数からのコマンド出力は許可
+//runtime関数は専用のmcfunctionファイルを持つ
+//非Argument引数を持つruntime関数は特殊化される
+//publicは省略可
+runtime public function summon_creeper_n_native(int n){ //namespace:path/summon_creeper_n_native
+  let nbt=NBT().setPowered(score.boolean.const(true)).setFuse(score.int.const(123)).setExplosionRadius(score.int.const(100));
+  for _ in 0..n{
+    summon(EntityTypes.Creeper,RelPos(0,0,0),nbt);
+  }
+}
+const creeper:EntityTypes=EntityTypes.creeper;
+//:戻り値注釈は省略可
+pure function double(int x):int{
+  return x+x;
+}
+runtime public function summon_creeper_n_runtime_four_times(score.int n):void{
+  for _ in 0..n{
+    summon(creeper,RelPos(0,0,0),NBT());
+  }
+  let i=score.int(0);
+  //ネスト関数定義・ラムダ関数でのキャプチャは無条件に許可される（ただし、ラムダ関数を変数に保持したりすることは不可）
+  runtime function for_loop(){
+    if i!=n{
+      //i.ne(n)
+      summon(EntityTypes.Creeper,RelPos(0,0,0),NBT());
+      i=i.(SuccRuntime)succ();//i++;
+      for_loop();//再帰呼び出しをすると全ローカル変数を上書きすることに注意
+    }
+  }
+  for_loop();
+  let i=score.int(0);//シャドーイングは許可
+  while i<n{
+    summon(EntityTypes.Creeper,RelPos(0,0,0),NBT());
+    i++;
+    continue;//return run function namespace:while_loop相当
+    unreachable();//complie-timeの場合はエラー、runtimeの場合はエラーログ出力、中断
+  }
+  runtime function while_loop(){
+    if i<n{
+      summon(EntityTypes.Creeper,RelPos(0,0,0),NBT());
+      i++;
+      while_loop();
+      return;
+      let a="_";
+      print_runtime("unreachable code at: line xx");
+    }
+  }
+  while_loop();
+  //function a(){} コンパイルエラー(runtime内からはplainを呼び出せないため)
+  //plain function a(){} コンパイルエラー
+}
+// publicは省略可
+public trait Add<T>{
+  inline add(self,T rhs):T;
+}
+public trait Subtract<T>{
+  inline subtract(self,T rhs):T;
+}
+...
+
+
+public class storage.array<T>where T:Storage{
+  StorageRef ref;
+  inline constructor(self){
+    self.ref=alloc_storage();
+    storage.remove(self.ref);
+    storage.set_array<int>(self.ref,[]);
+  }
+  runtime reverse(self){
+    let arr=storage.array();
+    for 0..storage.length_array(self.ref){
+      storage.append(arr.ref,self.pop());
+    }
+    return arr;
+  }
+  inline push(self,T t){
+    storage.append(self.ref,t);
+  }
+  inline pop(self):T{
+    let ref=alloc_storage();
+    storage.set(ref,self.ref.access_array(-1));
+    storage.remove(self.ref.access_array(-1));
+    return ref;
+  }
+}
+//関数の特徴:
+// 呼び出し可能性
+//- runtime関数       : runtime関数v plain関数x pure関数v inline関数v unsafe関数v 非Argument引数x 再帰v 外部変数書き換えx
+//- plain関数         : runtime関数v plain関数v pure関数v inline関数v unsafe関数v 非Argument引数v 再帰v 外部変数書き換えv
+//- pure関数          : runtime関数x plain関数x pure関数v inline関数x unsafe関数v 非Argument引数v 再帰v 外部変数書き換えx
+//- inline関数        : runtime関数v plain関数x pure関数v inline関数v unsafe関数v 非Argument引数v 再帰x 外部変数書き換えv
+//- unsafe関数        : runtime関数v plain関数v pure関数v inline関数v unsafe関数v 非Argument引数v 再帰v 外部変数書き換えv
+
+//score.class: Argumentを1つだけ実装する
+private class score.int implements Argument<Self>, Add<Self>, Subtract<Self>, Multiply<Self>, Division<Self>, Added<Self>, Subtracted<Self>, Multiplied<Self>, Divided<Self>,DerefAssign<Self>,SuccRuntime,PredRuntime,Eq<Self>,Gt<Self>,Lt<Self>,Recurse<storage.array<storage.int>>,AsStorage<storage.int>,Score,ExplicitCast<storage.int>,ImplicitCast<score.byte> {
+  ScoreRef ref;
+  inline constructor(self,int num){
+    self.ref=alloc_score();
+    *self=num;
+  }
+  //定数を生成する
+  inline static const(int num){
+    let num2=score.int{};//nullやデフォルト値で初期化
+    num2.ref=ScoreRef("#"+num,"_");
+    *num2=num;//scoreboard players setが重複して生成されるが、問題ない
+    return num2;
+  }
+  inline (Add)add(self,score.int rhs){
+    let ref=alloc_score();
+    scoreboard.copy(ref.ref,self.ref);
+    scoreboard.add(ref.ref,rhs.ref);
+    return ref;
+  }
+  inline (Subtract)subtract(self,score.int rhs){
+    let ref=alloc_score();
+    scoreboard.copy(ref.ref,self.ref);
+    scoreboard.sub(ref.ref,rhs.ref);
+    return ref;
+  }
+  ...
+  //addとadded両方ある場合にはadd優先
+  inline (Added)added(self,score.int lhs){
+    let ref=alloc_score();
+    scoreboard.copy(ref.ref,lhs.ref);
+    scoreboard.add(ref.ref,self.ref);
+    return ref;
+  }
+  inline (Subtracted)subtracted(self,score.int lhs){
+    let ref=alloc_score();
+    scoreboard.copy(ref.ref,lhs.ref);
+    scoreboard.sub(ref.ref,self.ref);
+    return ref;
+  }
+  plain (Argument)argument_def(Self holder){
+    holder.ref=alloc_score();
+  }
+  inline (Argument)argument_pass(Self holder,Self value){
+    scoreboard.copy(holder.ref,value.ref);
+  }
+  inline (Argument)argument_get(Self holder){
+    return holder;
+  }
+  inline (DerefAssign) deref_assign(self,score.int rhs){
+    scoreboard.copy(self.ref,rhs.ref);
+  }
+  inline (SuccRuntime) succ(self){
+    // runtime+compiletime=runtime
+    return self+1;
+  }
+  inline (SuccRuntime) pred(self){
+    return self-1;
+  }
+  inline (Eq) eq(self,rhs){
+    let ref=alloc_score();
+    Execute.store_score(ref,Execute.if_score_eq(self.ref,rhs.ref));
+    return score.boolean(ref);
+  }
+  //関数定義時に１回呼ばれる
+  inline (Recurse)define(self):storage.array<storage.int>{
+    return storage.array<storage.int>();
+  }
+  inline (Recurse)destroyed(self,storage.array<storage.int> stack){
+    stack.push(self.as_storage());
+  }
+  inline (Recurse)recover(self,storage.array<storage.int> stack):Self{
+    return stack.pop().as_score();
+  }
+  inline (AsStorage)as_storage(self){
+    let ref=alloc_storage();
+    Execute.store(ref,||{
+      freturn self;
+    });
+    return storage.int{ref:ref};
+  }
+  inline (Score)getScoreRef(){
+    return self.ref;
+  }
+  inline (ExplictCast<storage.int>)cast(self):storage.int{
+    return self.as_storage();
+  }
+  inline (ImplictCast<score.byte>)cast(self):score.byte{
+    return score.byte(self.ref);
+  }
+}
+implements Ne<score.int> for score.int{
+  inline ne(self,rhs){
+    let ref=alloc_score();
+    Execute.store_score(ref,Execute.if_score_ne(self.ref,rhs.ref));
+    return score.boolean(ref);
+  }
+}
+class storage.int  implements Argument<Self>, Add<Self>, Subtract<Self>, Multiply<Self>, Division<Self>, Added<Self>, Subtracted<Self>, Multiplied<Self>, Divided<Self>,DerefAssign<Self>,SuccRuntime,PredRuntime,Eq<Self>,Gt<Self>,Lt<Self>,Recurse<storage.array<storage.int>>,AsScore<score.int>,Storage {
+  StorageRef ref;
+  ...
+
+  inline (Storage)getStorageRef(self){
+    return self.ref;
+  }
+  inline (AsScore)as_score(self){
+    let ref:ScoreRef=alloc_score();
+    Execute.store(ref,||{
+      freturn self;
+    });
+    return score.int{ref:ref};
+  }
+}
+class score.boolean implements ...{
+  ...
+}
+class Execute{
+  native inline at(Selector selector,runtime ()=>void func);
+  native inline as(Selector selector,runtime ()=>void func);
+  ...
+}
+//定数enum
+enum TestEnum{
+  A,
+  B,
+  C
+}
+//<int>は省略可
+enum TestEnum2<int>{
+  A(1),
+  B(2),
+  C(3)
+}
+enum EntityTypes{
+  Creeper(EntityType("creeper")),
+  Zombie(EntityType("zombie")),
+  Skeleton(EntityType("skeleton"))
+}
+inline function alloc_score():ScoreRef{
+  let ref=allocate ScoreRef;
+  return ref;
+}
+class ScoreRef implements Allocate{
+  string player;
+  string scoreboard;
+  //再帰関数内部でallocated・それを含むものが再帰呼び出しを跨ぐとエラー
+  inline (Allocate)allocate(self,int allocated){
+    self.player="#tmp."+allocated;
+    self.scoreboard="_";
+  }
+  inline (Allocate)drop(self){
+    
+  }
+}
+runtime print_by_color(storage.string color){
+  print_runtime(\\c=color"COLORED");
+}
+runtime evaling(storage.string running){
+  eval(running);
+}
+// plainは省略可
+plain function load(){
+  Execute.at(@a[tag="123"],||{
+    summon_creeper_n_runtime_four_times(score.int(10));
+    summon_creeper_n_native(10);
+    evaling("summon husk ~ ~ ~")
+  });
+  print_runtime([\\bold\\red"RED ",\\c="c0ffee"\\italic=true" COFFEE",\\hover=[\\blue"hovered"]" HOVER",\\yellow storage.string("42")]);
+  print_by_color("ff0000");
+  static_assert(1==1,\`math(1+1={1+1}) went wrong\`);
+  #TargetVersion(">1.20.3")
+  {
+    print_runtime(">1.20.3")
+  }
+}
+
+`).lexing())

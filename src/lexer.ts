@@ -2,8 +2,8 @@ import { Error as LanguageError, LanguageLexerError } from "./error";
 
 const symbols = [
   "+", "-", "*", "/", "%", "=", "+=", "-=", "*=", "/=", "%=", "&&=", "||=",
-  "==", "!=", "<", "<=", ">", ">=", "&&", "||", "!", "++", "--", ".", ",", ";", "?", ":", "(",
-  ")", "{", "}", "[", "]"
+  "==", "!=", "<", "<=", ">", ">=", "&&", "||", "!", "++", "--", ".","..", ",", ";", "?", ":", "(",
+  ")", "{", "}", "[", "]","@","|","#"
 ];
 
 const symbolChars = Array.from(new Set(symbols.flatMap(e => e.split("")))).join("");
@@ -97,7 +97,7 @@ export class Lexer {
         }
 
         if (!closed) {
-          return new LanguageLexerError(start, this.text.length - start);
+return new LanguageLexerError(start, this.text.length - start, "Unterminated block comment");
         }
 
         continue;
@@ -115,7 +115,7 @@ export class Lexer {
 
     const esc = this.text[i];
     if (esc === undefined) {
-      return new LanguageLexerError(start, 1);
+      return new LanguageLexerError(start, 1, "Unexpected end of escape sequence");
     }
 
     const simple: Record<string, string> = {
@@ -145,12 +145,12 @@ export class Lexer {
       const hex = this.text.substring(hexStart, hexStart + len);
 
       if (hex.length !== len || !/^[0-9a-fA-F]+$/.test(hex)) {
-        return new LanguageLexerError(hexStart, len);
+  return new LanguageLexerError(hexStart, len, "Invalid hexadecimal escape sequence");
       }
 
       const num = parseInt(hex, 16);
       if (num > 0x10ffff) {
-        return new LanguageLexerError(hexStart, len);
+  return new LanguageLexerError(hexStart, len, "Unicode escape out of range");
       }
 
       return { value: String.fromCodePoint(num), next: hexStart + len };
@@ -171,12 +171,12 @@ export class Lexer {
         }
 
         if (oct.length === 0 || this.text[j] !== "}") {
-          return new LanguageLexerError(octStart, 1);
+          return new LanguageLexerError(octStart, 1,"Invalid octal escape sequence");
         }
 
         const num = parseInt(oct, 8);
         if (num > 0x10ffff) {
-          return new LanguageLexerError(octStart, oct.length);
+          return new LanguageLexerError(octStart, oct.length, "Unicode escape out of range");
         }
 
         return { value: String.fromCodePoint(num), next: j + 1 };
@@ -191,12 +191,12 @@ export class Lexer {
       }
 
       if (oct.length === 0) {
-        return new LanguageLexerError(i, 1);
+        return new LanguageLexerError(i, 1,"Invalid octal escape sequence");
       }
 
       const num = parseInt(oct, 8);
       if (num > 0x10ffff) {
-        return new LanguageLexerError(octStart, oct.length);
+        return new LanguageLexerError(octStart, oct.length, "Unicode escape out of range");
       }
 
       return { value: String.fromCodePoint(num), next: j };
@@ -220,7 +220,7 @@ export class Lexer {
       return { value: String.fromCodePoint(num), next: j };
     }
 
-    return new LanguageLexerError(i, 1);
+    return new LanguageLexerError(i, 1, "Invalid Unicode escape sequence");
   }
 
   forwardNumber(): undefined | Token | LanguageError {
@@ -250,7 +250,7 @@ export class Lexer {
         str += current();
         i++;
         if (!readDigits("0123456789abcdefABCDEF")) {
-          return new LanguageLexerError(start, i - start);
+          return new LanguageLexerError(i,1,"Invalid digit in hexadecimal number");
         }
         return new Token(str, TokenType.number, start, i - start);
       }
@@ -259,7 +259,7 @@ export class Lexer {
         str += current();
         i++;
         if (!readDigits("01234567")) {
-          return new LanguageLexerError(start, i - start);
+          return new LanguageLexerError(i,1,"Invalid digit in octal number");
         }
         return new Token(str, TokenType.number, start, i - start);
       }
@@ -268,18 +268,19 @@ export class Lexer {
         str += current();
         i++;
         if (!readDigits("01")) {
-          return new LanguageLexerError(start, i - start);
+          return new LanguageLexerError(i,1,"Invalid digit in binary number");
         }
         return new Token(str, TokenType.number, start, i - start);
       }
     }
 
     if (current() === ".") {
+      let preStr=str;
       str += current();
       i++;
 
       if (!readDigits("0123456789")) {
-        return new LanguageLexerError(start, i - start);
+        return new Token(preStr,TokenType.number,start,i-1-start);
       }
     }
 
@@ -293,7 +294,7 @@ export class Lexer {
       }
 
       if (!readDigits("0123456789")) {
-        return new LanguageLexerError(start, i - start);
+        return new LanguageLexerError(i,1,"Invalid digit");
       }
     }
 
@@ -324,7 +325,7 @@ export class Lexer {
     }
 
     if (this.text[i] !== quote) {
-      return new LanguageLexerError(start, i - start);
+      return new LanguageLexerError(i-1,1,"Unterminated string");
     }
 
     i++; // closing quote
@@ -342,7 +343,7 @@ export class Lexer {
     let i = start + 1;
 
     if (!this.isIdentStart(this.text[i])) {
-      return new LanguageLexerError(start, 1);
+      return new LanguageLexerError(start, 1,"Invalid text component key");
     }
 
     let key = "";
@@ -366,7 +367,7 @@ export class Lexer {
     } else if (this.text[i] === "}") {
       // 補間式の閉じ } からテンプレート本文へ戻る
       if (this.templateExprDepthStack.length === 0) {
-        return new LanguageLexerError(start, 1);
+        return new LanguageLexerError(start, 1, "Unexpected '}' outside template expression");
       }
       isContinuation = true;
       i++;
@@ -420,7 +421,7 @@ export class Lexer {
       i++;
     }
 
-    return new LanguageLexerError(start, i - start);
+    return new LanguageLexerError(start, i - start,"Unterminated template literal");
   }
 
   forwardIdentifier(): undefined | Token | LanguageError {
@@ -457,7 +458,7 @@ export class Lexer {
       }
     }
 
-    return new LanguageLexerError(start, 1);
+    return new LanguageLexerError(start, 1, "Invalid symbol");
   }
   lexing(): Token[] | LanguageError {
     const tokens: Token[] = [];
@@ -468,7 +469,7 @@ export class Lexer {
 
       if (this.read >= this.text.length) {
         if (this.templateExprDepthStack.length > 0) {
-          return new LanguageLexerError(this.text.length-1, 1);
+          return new LanguageLexerError(this.text.length-1, 1, "Unterminated template literal");
         }
         return tokens;
       }
@@ -483,7 +484,7 @@ export class Lexer {
         const token = this.forwardTemplateText();
 
         if (token instanceof LanguageError) return token;
-        if (!token) return new LanguageLexerError(this.read, 1);
+        if (!token) return new LanguageLexerError(this.read, 1, "Unexpected end of template literal");
 
         tokens.push(token);
         this.read += token.length();
@@ -495,7 +496,7 @@ export class Lexer {
         const token = this.forwardTemplateText();
 
         if (token instanceof LanguageError) return token;
-        if (!token) return new LanguageLexerError(this.read, 1);
+        if (!token) return new LanguageLexerError(this.read, 1, "Unexpected start of template literal");
 
         tokens.push(token);
         this.read += token.length();
@@ -527,7 +528,7 @@ export class Lexer {
       }
 
       if (!best) {
-        return new LanguageLexerError(this.read, 1);
+        return new LanguageLexerError(this.read, 1, "Unexpected letter");
       }
 
       // テンプレート補間式内の { } は深さを追跡する
