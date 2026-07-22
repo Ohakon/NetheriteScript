@@ -1,17 +1,18 @@
 import std.score.byte;
 import ast;
 import compile;
-module main;//import main;でmain.*が使える。function namespace:main/*に出力される
+//:publicはIMP-Docの可視性
+module main:public;//import main;でmain.*が使える。function namespace:main/*に出力される
 
 type scint=score.int;
 
 //plain関数からのコマンド出力は許可
 //runtime関数は専用のmcfunctionファイルを持つ
-//非Argument引数を持つruntime関数は特殊化される
+//非ArgumentReturn引数を持つruntime関数は特殊化される
 //publicは省略可
 //runtime関数はコンパイル時に１度だけ実行される（その出力がmc実行時に実行される）
 runtime public function summon_creeper_n_native(int n=4){ //namespace:path/summon_creeper_n_native
-  let nbt=NBT().setPowered(score.boolean.const(true)).setFuse(score.int.const(123)).setExplosionRadius(score.int.const(100));
+  let nbt=NBT().set_powered(score.boolean.const(true)).set_fuse(score.int.const(123)).set_explosion_radius(score.int.const(100));
   for _ in 0..n{
     summon(entity_types.creeper,RelPos(0,0,0),nbt);
   }
@@ -20,6 +21,8 @@ runtime public function summon_creeper_n_native(int n=4){ //namespace:path/summo
 pure function double(int x):int{
   return x+x;
 }
+extern runtime function namespace2:api/another_function;//型はanyまたはIMP-Docから参照
+//constはフィールドも変更不可
 const creeper:EntityTypes=entity_types.creeper;
 let num:int=0;
 runtime public function summon_creeper_n_runtime_four_times(score.int n=score.int(4)):void{
@@ -28,6 +31,7 @@ runtime public function summon_creeper_n_runtime_four_times(score.int n=score.in
     summon(creeper,RelPos(0,0,0),NBT());
     //num=double(num);letはruntimeから参照不可
   }
+  //上は下に変換される
   let i=score.int(0);
   //ネスト関数定義・ラムダ関数でのキャプチャは無条件に許可される（ラムダ関数を変数に保持したりすることが不可であるため）
   runtime function for_loop(){
@@ -44,15 +48,15 @@ runtime public function summon_creeper_n_runtime_four_times(score.int n=score.in
     summon(entity_types.creeper,RelPos(0,0,0),NBT());
     i++;
     continue;//return run function namespace:while_loop相当
-    unreachable();//complie-timeの場合はエラー、runtimeの場合はエラーログ出力、中断
+    unreachable();//complie-timeの場合はエラー、runtimeの場合はエラーログ出力、中断など
   }
+  //上は下に変換される
   runtime function while_loop(){
     if i<n{
       summon(entity_types.creeper,RelPos(0,0,0),NBT());
       i++;
       while_loop();
       return;
-      let a="_";
       print_runtime("unreachable code at: line xx");
     }
   }
@@ -101,17 +105,19 @@ public class storage.array<T>where T:Storage{
 }
 //関数の特徴:
 // 呼び出し可能性
-//- runtime関数       : runtime関数v plain関数x pure関数v inline関数v unsafe関数v 非Argument引数x 再帰v 外部変数書き換えx
-//- plain関数         : runtime関数v plain関数v pure関数v inline関数v unsafe関数v 非Argument引数v 再帰v 外部変数書き換えv
-//- pure関数          : runtime関数x plain関数x pure関数v inline関数x unsafe関数x 非Argument引数v 再帰v 外部変数書き換えx
-//- inline関数        : runtime関数v plain関数x pure関数v inline関数v unsafe関数v 非Argument引数v 再帰x 外部変数書き換えv
-//- unsafe関数        : runtime関数v plain関数v pure関数v inline関数v unsafe関数v 非Argument引数v 再帰v 外部変数書き換えv
+//- runtime関数       : runtime関数v plain関数x pure関数v inline関数v unsafe関数v 非ArgumentReturn引数x 再帰v 外部変数書き換えx
+//- plain関数         : runtime関数v plain関数v pure関数v inline関数v unsafe関数v 非ArgumentReturn引数v 再帰v 外部変数書き換えv
+//- pure関数          : runtime関数x plain関数x pure関数v inline関数x unsafe関数x 非ArgumentReturn引数v 再帰v 外部変数書き換えx
+//- inline関数        : runtime関数v plain関数x pure関数v inline関数v unsafe関数v 非ArgumentReturn引数v 再帰x 外部変数書き換えv
+//- unsafe関数        : runtime関数v plain関数v pure関数v inline関数v unsafe関数v 非ArgumentReturn引数v 再帰v 外部変数書き換えv
 //native関数はjavaのようなもので、ハードコードされた処理を示す
 //unsafeはruntimeやimlineの外部変数書き換え禁止をバイパスする
+//pureは外部letの参照・引数への操作不可
 
-//score.class: Argumentを1つだけ実装する
-private class score.int implements Argument<Self>, Add<Self>, Subtract<Self>, Multiply<Self>, Division<Self>, Added<Self>, Subtracted<Self>, Multiplied<Self>, Divided<Self>,DerefAssign<Self>,SuccRuntime,PredRuntime,Eq<Self>,Gt<Self>,Lt<Self>,Recurse<storage.array<storage.int>>,AsStorage<storage.int>,Score,ExplicitCast<storage.int>,ImplicitCast<score.byte> {
+//score.class: ArgumentReturnを1つだけ実装する
+private class score.int implements ArgumentReturn<Self>, Add<Self>, Subtract<Self>, Multiply<Self>, Division<Self>, Added<Self>, Subtracted<Self>, Multiplied<Self>, Divided<Self>,DerefAssign<Self>,SuccRuntime,PredRuntime,Eq<Self>,Gt<Self>,Lt<Self>,Recurse<storage.array<storage.int>>,AsStorage<storage.int>,Score,ExplicitCast<storage.int>,ImplicitCast<score.byte> {
   ScoreRef ref;
+  public static int five=5;
   inline constructor(self,int num){
     self.ref=allocate ScoreRef;
     *self=num;
@@ -149,13 +155,13 @@ private class score.int implements Argument<Self>, Add<Self>, Subtract<Self>, Mu
     scoreboard.sub(ref.ref,self.ref);
     return ref;
   }
-  plain (Argument)argument_def(Self holder){
+  plain (ArgumentReturn)argument_def(Self holder){
     holder.ref=allocate ScoreRef;
   }
-  inline (Argument)argument_pass(Self holder,Self value){
+  inline (ArgumentReturn)argument_pass(Self holder,Self value){
     scoreboard.copy(holder.ref,value.ref);
   }
-  inline (Argument)argument_get(Self holder){
+  inline (ArgumentReturn)argument_get(Self holder){
     return holder;
   }
   inline (DerefAssign) deref_assign(self,score.int rhs){
@@ -210,7 +216,7 @@ implements Ne<score.int> for score.int{
     return score.boolean(ref);
   }
 }
-class storage.int  implements Argument<Self>, Add<Self>, Subtract<Self>, Multiply<Self>, Division<Self>, Added<Self>, Subtracted<Self>, Multiplied<Self>, Divided<Self>,DerefAssign<Self>,SuccRuntime,PredRuntime,Eq<Self>,Gt<Self>,Lt<Self>,Recurse<storage.array<storage.int>>,AsScore<score.int>,Storage {
+class storage.int  implements ArgumentReturn<Self>, Add<Self>, Subtract<Self>, Multiply<Self>, Division<Self>, Added<Self>, Subtracted<Self>, Multiplied<Self>, Divided<Self>,DerefAssign<Self>,SuccRuntime,PredRuntime,Eq<Self>,Gt<Self>,Lt<Self>,Recurse<storage.array<storage.int>>,AsScore<score.int>,Storage {
   StorageRef ref;
   ...
 
@@ -255,21 +261,17 @@ class ScoreRef implements Allocate,Drop{
   string scoreboard;
   int ref_id;
   //再帰関数内部でallocated・それを含むものが再帰呼び出しを跨ぐとエラー
-  //呼び出しグラフ構築->
-  //SCC->
-  //トポロジカルソート->
-  //ルートからどのレジスタが使われるかを調べ、子供へ使用制限を伝播させる
-  //(ただし、複数箇所から呼び出される場合は全ての親の使用制限が揃うまで待つ)
-  //(ループ内では親からの使用制限を守りつつ、それ以外は自由)
+  //plain系統を普通に実行
+  //したらばどのruntime関数がどのレジスタが埋まってる状態で呼び出されるかわかるので
+  //runtime関数群をSCC->トポロジカルソート
+  //順番に実行+変数の寿命が来た時点でdropを試す(逆参照を辿ってルートを探すため、安心)
+  //したらば子供のruntime関数がどのレジスタが埋まってる状態で呼び出されるかわかるので
+  //いい感じのindexでallocate
   (Allocate)allocate(self,int index){
     self.ref_id=index;
-    self.player="#tmp."+index;
+    self.player=`#{compile.namespace}.{index}`;
     self.scoreboard="_";
   }
-  //freeは逆参照セットを使ったメモリ管理による
-  (Allocate)free(self){
-  }
-  //dropも逆参照セットを使ったメモリ管理による
   inline (Drop)drop(self){
     
   }
@@ -279,7 +281,7 @@ class ScoreRef implements Allocate,Drop{
 macro TargetVersion{
   string version
 }(self,compile.Block body){
-  let op=["<=",">=","==","!=","<",">"].find(|e|self.version.startsWith(e));
+  let op=["<=",">=","==","!=","<",">"].find(|e|self.version.starts_with(e));
   let target_version=minecraft.versions[self.version.substr(op.length)].datapackVersion;
   let current_version=minecraft.versions[compile.minecraft_version].datapackVersion;
   let valid=switch op{
@@ -334,8 +336,7 @@ class MyEntity{
       return ref;
     }
     inline set(self,storage.float rhs){
-      let ref=storage.float(0);
-      storage.copy(self.ref.access_field("Health"),ref.ref);
+      storage.copy(self.ref.access_field("Health"),rhs.ref);
     }
   }
 }
@@ -348,8 +349,6 @@ class MyMarker implements Allocate,Drop{
   inline (Allocate)allocate(self,int lives){
     self.uuid=uuid();
   }
-  (Allocate)free(self){
-  }
   inline (Drop)drop(self){
     kill(self.uuid);
   }
@@ -359,6 +358,38 @@ runtime print_by_color(storage.string color){
 }
 runtime evaling(storage.string running){
   eval(running);
+}
+function lifetime(){
+  //ライフタイム解析:
+  //  
+  //  変数のドロップ位置を確認->
+  let a=lifetime(LifeTimeTest{});//a.1.drop();
+  let b=a.0;//a.0.drop();
+  let c=LifeTimeTest{};
+  let d=lifetime_gen2([],c);
+  print_compile(d);//c.drop()
+}
+function lifetime_gen(LifeTimeTest c):(LifeTimeTest,LifeTimeTest){
+  //内部的には: lifetime_gen(&c LifeTimeTest c):(&a LifeTimeTest,&c LifeTimeTest)
+  let a=lifetime_origin();
+  let b=lifetime_origin();
+  return (a,c);
+}
+function lifetime_gen2(LifeTimeTest[] c,LifeTimeTest d):LifeTimeTest[]{
+  //内部的には: lifetime_gen2(&d LifeTimeTest c):LifeTimeTest[&a,&d]
+  let a=lifetime_origin();
+  return c.concat([a,d]);
+}
+function lifetime_origin(){
+  return allocate LifeTimeTest;
+}
+class LifeTimeTest implements Allocate,Drop{
+  (Allocate)allocate(self,int index){
+
+  }
+  (Drop)drop(self){
+    
+  }
 }
 // plainは省略可
 #Load
@@ -370,7 +401,6 @@ plain function load(){
   });
   print_runtime([\bold\red"RED ",\c="c0ffee"\italic=true" COFFEE",\hover=[\blue"hovered"]" HOVER",\yellow storage.string("42")]);
   print_by_color("ff0000");
-  static_assert(1==1,`math(1+1={1+1}) went wrong`);
   #TargetVersion(">1.20.3")
   {
     print_runtime(">1.20.3")
@@ -383,4 +413,12 @@ plain function load(){
   1.(Add<int>)add(2);
   let a=score.int(5);
   let b=a;//共有
+}
+#Tick
+plain function tick(){
+  Execute.as(@a).as(@a).as(@a).at(@a,||summon(entity_types.tnt,RelPos(0,0,0),NBT().set_fuse(0)));
+}
+#Test
+plain function test(){
+  compile_assert(1==1,`math(1+1={1+1}) went wrong`);
 }
