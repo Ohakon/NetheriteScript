@@ -73,15 +73,15 @@ public trait Subtract<T>{
 }
 ...
 
-//defalut値はnull(primitiveでも)
-public class storage.array<T>where T:Storage{
+//default値はnull(primitiveでも)
+public class storage.array<T>where T:Storage+Something{
   StorageRef ref;
   inline constructor(self){
     self.ref=alloc_storage();
     storage.remove(self.ref);
     storage.set_array<int>(self.ref,[]);
   }
-  runtime reverse(self){
+  runtime drain_reverse(self){
     let arr=storage.array();
     for 0..storage.length_array(self.ref){
       storage.append(arr.ref,self.pop());
@@ -189,6 +189,7 @@ private class score.int implements ArgumentReturn<Self>, Add<Self>, Subtract<Sel
   inline (Recurse)recover(self,storage.array<storage.int> stack):Self{
     return stack.last().as_score();
   }
+  //最後の使用時
   inline (Recurse)drop(self,storage.array<storage.int> stack){
     stack.pop();
   }
@@ -202,10 +203,10 @@ private class score.int implements ArgumentReturn<Self>, Add<Self>, Subtract<Sel
   inline (Score)getScoreRef(){
     return self.ref;
   }
-  inline (ExplictCast<storage.int>)cast(self):storage.int{
+  inline (ExplicitCast<storage.int>)cast(self):storage.int{
     return self.as_storage();
   }
-  inline (ImplictCast<score.byte>)cast(self):score.byte{
+  inline (ImplicitCast<score.byte>)cast(self):score.byte{
     return score.byte(self.ref);
   }
 }
@@ -252,9 +253,9 @@ enum TestEnum2{
 }
 //runtime enumはないはず
 module entity_types{
-  const creeper=EntityType("creeper")
-  const zombie=EntityType("zombie")
-  const skeleton=EntityType("skeleton")
+  const creeper=EntityType("creeper");
+  const zombie=EntityType("zombie");
+  const skeleton=EntityType("skeleton");
 }
 class ScoreRef implements Allocate,Drop{
   string player;

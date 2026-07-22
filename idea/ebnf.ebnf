@@ -1,0 +1,332 @@
+(* ============================================================
+   Compilation Unit
+   ============================================================ *)
+
+CompilationUnit => {TopLevelItem};
+
+TopLevelItem => ModuleDecl
+              | ImportDecl
+              | TypeAliasDecl
+              | ConstDecl
+              | LetDecl
+              | FunctionDecl
+              | ClassDecl
+              | TraitDecl
+              | EnumDecl
+              | ImplDecl
+              | MacroDecl
+              | MacroInvocationStmt;
+
+(* ============================================================
+   Module / Import / Type Alias
+   ============================================================ *)
+
+ModuleDecl => "module", Path, [":", Visibility], (";" | ModuleBody);
+ModuleBody => "{", {TopLevelItem}, "}";
+Visibility => "public" | "private";
+
+ImportDecl => "import", ImportPath, ";";
+ImportPath => Path, [".", "*"] | "*";
+
+TypeAliasDecl => "type", Identifier, [TypeParams], "=", Type, ";";
+
+(* ============================================================
+   Const / Let (top-level & statement)
+   ============================================================ *)
+
+ConstDecl => {DeclModifier}, "const", Identifier, [":", Type], "=", Expr, ";";
+LetDecl   => {DeclModifier}, "let", Identifier, [":", Type], "=", Expr, ";";
+DeclModifier => "public" | "private";
+
+(* ============================================================
+   Function Declaration
+   ============================================================ *)
+
+FunctionDecl => {FunctionModifier}, "function", FunctionSignature, (Block | ";");
+
+FunctionModifier => "runtime" | "plain" | "pure" | "inline"
+                  | "unsafe" | "native"
+                  | "public" | "private"
+                  | "extern" | "static";
+
+FunctionSignature => [TraitAssoc], FunctionName, [TypeParams],
+                     "(", [ParamList], ")", [":", Type], [WhereClause];
+
+TraitAssoc   => "(", Path, ")";
+FunctionName => Path;
+
+ParamList => Param, {",", Param};
+Param     => [Type], Identifier, ["=", Expr];
+
+(* ============================================================
+   Class Declaration
+   ============================================================ *)
+
+ClassDecl => {ClassModifier}, "class", Path, [TypeParams],
+             [WhereClause], [ImplementsClause], ClassBody;
+
+ClassModifier => "public" | "private";
+
+TypeParams  => "<", IdentList, ">";
+IdentList   => Identifier, {",", Identifier};
+
+WhereClause => "where", WhereBound, {",", WhereBound};
+WhereBound  => Identifier, ":", TypeBoundList;
+TypeBoundList => Path, [TypeArgs], {"+", Path, [TypeArgs]};
+
+ImplementsClause => "implements", Path, [TypeArgs],
+                    {",", Path, [TypeArgs]};
+
+ClassBody => "{", {ClassItem}, "}";
+
+ClassItem => FieldDecl
+           | ConstructorDecl
+           | FunctionDecl
+           | PropertyDecl;
+
+FieldDecl => {FunctionModifier}, Type, Identifier, ["=", Expr], ";";
+
+ConstructorDecl => {FunctionModifier}, "constructor",
+                   "(", [ParamList], ")", Block;
+
+PropertyDecl => Type, Identifier, "{", {Accessor}, "}";
+Accessor    => {FunctionModifier}, ("get" | "set"),
+               "(", [ParamList], ")", Block;
+
+(* ============================================================
+   Trait Declaration
+   ============================================================ *)
+
+TraitDecl => {TraitModifier}, "trait", Identifier, [TypeParams],
+             [WhereClause], TraitBody;
+TraitModifier => "public" | "private";
+TraitBody => "{", {FunctionDecl}, "}";
+
+(* ============================================================
+   Enum Declaration
+   ============================================================ *)
+
+EnumDecl => {EnumModifier}, "enum", Identifier, EnumBody;
+EnumModifier => "public" | "private";
+EnumBody => "{", [EnumVariant, {",", EnumVariant}, [","]], "}";
+EnumVariant => Identifier, [VariantData];
+VariantData => "(", Type, ")"
+             | "{", FieldDef, {",", FieldDef}, [","], "}";
+FieldDef => Identifier, ":", Type;
+
+(* ============================================================
+   Impl Declaration (standalone)
+   ============================================================ *)
+
+ImplDecl => "implements", Path, [TypeArgs], "for", Type, ImplBody;
+ImplBody => "{", {FunctionDecl}, "}";
+
+(* ============================================================
+   Macro Declaration
+   ============================================================ *)
+
+MacroDecl => "macro", Path, MacroFields, "(", ParamList, ")", Block;
+MacroFields => "{", {FieldDecl}, "}";
+
+(* ============================================================
+   Macro Invocation (as statement or expression prefix)
+   ============================================================ *)
+
+MacroInvocationStmt => "#", Path, [MacroArgs], (";" | Block | TopLevelItem);
+MacroArgs => "(", [ExprList], ")";
+
+(* ============================================================
+   Types
+   ============================================================ *)
+
+Type => FunctionType
+      | "(", Type, {",", Type}, ")"
+      | NamedType, {"[", "]"};
+
+FunctionType => [FunctionModifier], "(", [TypeList], ")", "=>", Type;
+
+NamedType => Path, [TypeArgs];
+TypeArgs  => "<", TypeList, ">";
+TypeList  => Type, {",", Type};
+
+(* ============================================================
+   Statements
+   ============================================================ *)
+
+Statement => LetDecl
+           | ConstDecl
+           | ForStmt
+           | WhileStmt
+           | IfStmt
+           | ReturnStmt
+           | BreakStmt
+           | ContinueStmt
+           | UnreachableStmt
+           | FunctionDecl
+           | MacroInvocationStmt
+           | ExprStmt;
+
+ForStmt   => "for", [Identifier], "in", Expr, Block, ["else", Expr], [";"];
+WhileStmt => "while", Expr, Block, ["else", Expr], [";"];
+IfStmt    => "if", Expr, Block,
+             {"else", "if", Expr, Block},
+             ["else", (Block | Expr)], [";"];
+
+ReturnStmt      => "return", [Expr], ";";
+BreakStmt       => "break", [Expr], ";";
+ContinueStmt    => "continue", ";";
+UnreachableStmt => "unreachable", "(", ")", ";";
+
+ExprStmt => Expr, ";";
+
+(* ============================================================
+   Expressions (precedence: low → high)
+   ============================================================ *)
+
+Expr => MacroExpr | AssignExpr;
+
+MacroExpr => "#", Path, [MacroArgs], Expr;
+
+AssignExpr => TernaryExpr, [AssignOp, AssignExpr];
+AssignOp   => "=" | "+=" | "-=" | "*=" | "/=" | "%="
+            | "&=" | "|=" | "^=" | "<<=" | ">>=";
+
+TernaryExpr => OrExpr, ["?", Expr, ":", Expr];
+
+OrExpr  => AndExpr, {"||", AndExpr};
+AndExpr => BitOrExpr, {"&&", BitOrExpr};
+
+BitOrExpr  => BitXorExpr, {"|", BitXorExpr};
+BitXorExpr => BitAndExpr, {"^", BitAndExpr};
+BitAndExpr => EqExpr, {"&", EqExpr};
+
+EqExpr  => CompExpr, {("==" | "!="), CompExpr};
+CompExpr => RangeExpr, {("<" | ">" | "<=" | ">="), RangeExpr};
+
+RangeExpr => AddExpr, ["..", AddExpr];
+
+AddExpr => MulExpr, {("+" | "-"), MulExpr};
+MulExpr => UnaryExpr, {("*" | "/" | "%"), UnaryExpr};
+
+UnaryExpr => ("!" | "-" | "++" | "--"), UnaryExpr
+           | PostfixExpr;
+
+PostfixExpr => PrimaryExpr, {PostfixOp};
+
+PostfixOp => "++"
+           | "--"
+           | ".", "(", Path, ")", Identifier
+           | ".", Identifier
+           | "(", [ExprList], ")"
+           | "[", Expr, "]"
+           | "{", [FieldInitList], "}";
+
+PrimaryExpr => Literal
+             | SelectorLit
+             | TemplateLit
+             | StringLit
+             | Path
+             | "self"
+             | "allocate", Path
+             | "unsafe", Block
+             | "(", Expr, {",", Expr}, ")"
+             | "[", [ExprList], "]"
+             | Block
+             | Lambda
+             | IfExpr
+             | ForExpr
+             | WhileExpr
+             | SwitchExpr
+             | MatchExpr;
+
+ExprList => Expr, {",", Expr};
+
+(* ============================================================
+   Block Expression
+   ============================================================ *)
+
+Block => "{", {Statement}, [Expr], "}";
+
+(* ============================================================
+   Lambda
+   ============================================================ *)
+
+Lambda => "|", [LambdaParams], "|", [":", Type], Expr;
+LambdaParams => LambdaParam, {",", LambdaParam};
+LambdaParam  => Identifier, [":", Type];
+
+(* ============================================================
+   If / For / While / Switch / Match as Expressions
+   ============================================================ *)
+
+IfExpr => "if", Expr, Block,
+          {"else", "if", Expr, Block},
+          ["else", (Block | Expr)];
+
+ForExpr   => "for", [Identifier], "in", Expr, Block, ["else", Expr];
+WhileExpr => "while", Expr, Block, ["else", Expr];
+
+SwitchExpr => "switch", Expr, "{", {SwitchArm}, "}";
+SwitchArm  => Expr, {"|", Expr}, "=>", Expr, [","];
+
+MatchExpr => "match", Expr, "{", {MatchArm}, "}";
+MatchArm  => Pattern, "=>", Expr, [","];
+
+(* ============================================================
+   Patterns
+   ============================================================ *)
+
+Pattern => "_"
+         | Literal
+         | Path, ["(", [PatternList], ")"], ["{", [FieldPatternList], "}"]
+         | "(", [PatternList], ")";
+
+PatternList => Pattern, {",", Pattern};
+FieldPatternList => FieldPattern, {",", FieldPattern};
+FieldPattern => Identifier, [":", Pattern];
+
+(* ============================================================
+   Literals
+   ============================================================ *)
+
+Literal => NumberLit | BoolLit | NullLit;
+BoolLit  => "true" | "false";
+NullLit  => "null";
+
+(* NumberLit, Identifier, Path are lexer-defined *)
+NumberLit => (* lexer *);
+Identifier => (* lexer *);
+
+(* ============================================================
+   String Literals
+   ============================================================ *)
+
+StringLit => {StringFormat}, QuotedString;
+StringFormat => "\\", Identifier, ["=", Expr];
+QuotedString => '"', {StringChar | Interpolation}, '"';
+Interpolation => "{", Expr, "}";
+StringChar => (* any char except '"' and '{' *);
+
+TemplateLit => '`', {TemplateChar | Interpolation}, '`';
+TemplateChar => (* any char except '`' and '{' *);
+
+(* ============================================================
+   Selector Literal
+   ============================================================ *)
+
+SelectorLit => "@", Identifier, [SelectorArgs];
+SelectorArgs => "[", SelectorFilter, {",", SelectorFilter}, "]";
+SelectorFilter => Identifier, "=", Expr;
+
+(* ============================================================
+   Field Initialization (struct literal)
+   ============================================================ *)
+
+FieldInitList => FieldInit, {",", FieldInit}, [","];
+FieldInit => Identifier, ":", Expr;
+
+(* ============================================================
+   Auxiliary
+   ============================================================ *)
+
+Path => Identifier, {(".", Identifier) | (":", Identifier, {"/", Identifier})};
