@@ -3,12 +3,14 @@ import ast;
 import compile;
 module main;//import main;でmain.*が使える。function namespace:main/*に出力される
 
+type scint=score.int;
+
 //plain関数からのコマンド出力は許可
 //runtime関数は専用のmcfunctionファイルを持つ
 //非Argument引数を持つruntime関数は特殊化される
 //publicは省略可
-//runtime関数はコンパイル時に１度だけ実行される
-runtime public function summon_creeper_n_native(int n){ //namespace:path/summon_creeper_n_native
+//runtime関数はコンパイル時に１度だけ実行される（その出力がmc実行時に実行される）
+runtime public function summon_creeper_n_native(int n=4){ //namespace:path/summon_creeper_n_native
   let nbt=NBT().setPowered(score.boolean.const(true)).setFuse(score.int.const(123)).setExplosionRadius(score.int.const(100));
   for _ in 0..n{
     summon(entity_types.creeper,RelPos(0,0,0),nbt);
@@ -20,14 +22,14 @@ pure function double(int x):int{
 }
 const creeper:EntityTypes=entity_types.creeper;
 let num:int=0;
-runtime public function summon_creeper_n_runtime_four_times(score.int n):void{
+runtime public function summon_creeper_n_runtime_four_times(score.int n=score.int(4)):void{
   for _ in 0..n{
     //constはruntimeからでも参照可
     summon(creeper,RelPos(0,0,0),NBT());
     //num=double(num);letはruntimeから参照不可
   }
   let i=score.int(0);
-  //ネスト関数定義・ラムダ関数でのキャプチャは無条件に許可される（ただし、ラムダ関数を変数に保持したりすることは不可）
+  //ネスト関数定義・ラムダ関数でのキャプチャは無条件に許可される（ラムダ関数を変数に保持したりすることが不可であるため）
   runtime function for_loop(){
     if i!=n{
       //i.ne(n)
@@ -67,7 +69,7 @@ public trait Subtract<T>{
 }
 ...
 
-
+//defalut値はnull(primitiveでも)
 public class storage.array<T>where T:Storage{
   StorageRef ref;
   inline constructor(self){
@@ -89,21 +91,23 @@ public class storage.array<T>where T:Storage{
     let ref=alloc_storage();
     storage.set(ref,self.ref.access_array(-1));
     storage.remove(self.ref.access_array(-1));
-    return ref;
+    return T.from_ref(ref);
   }
   inline last(self):T{
     let ref=alloc_storage();
     storage.set(ref,self.ref.access_array(-1));
-    return ref;
+    return T.from_ref(ref);
   }
 }
 //関数の特徴:
 // 呼び出し可能性
 //- runtime関数       : runtime関数v plain関数x pure関数v inline関数v unsafe関数v 非Argument引数x 再帰v 外部変数書き換えx
 //- plain関数         : runtime関数v plain関数v pure関数v inline関数v unsafe関数v 非Argument引数v 再帰v 外部変数書き換えv
-//- pure関数          : runtime関数x plain関数x pure関数v inline関数x unsafe関数v 非Argument引数v 再帰v 外部変数書き換えx
+//- pure関数          : runtime関数x plain関数x pure関数v inline関数x unsafe関数x 非Argument引数v 再帰v 外部変数書き換えx
 //- inline関数        : runtime関数v plain関数x pure関数v inline関数v unsafe関数v 非Argument引数v 再帰x 外部変数書き換えv
 //- unsafe関数        : runtime関数v plain関数v pure関数v inline関数v unsafe関数v 非Argument引数v 再帰v 外部変数書き換えv
+//native関数はjavaのようなもので、ハードコードされた処理を示す
+//unsafeはruntimeやimlineの外部変数書き換え禁止をバイパスする
 
 //score.class: Argumentを1つだけ実装する
 private class score.int implements Argument<Self>, Add<Self>, Subtract<Self>, Multiply<Self>, Division<Self>, Added<Self>, Subtracted<Self>, Multiplied<Self>, Divided<Self>,DerefAssign<Self>,SuccRuntime,PredRuntime,Eq<Self>,Gt<Self>,Lt<Self>,Recurse<storage.array<storage.int>>,AsStorage<storage.int>,Score,ExplicitCast<storage.int>,ImplicitCast<score.byte> {
@@ -161,7 +165,7 @@ private class score.int implements Argument<Self>, Add<Self>, Subtract<Self>, Mu
     // runtime+compiletime=runtime
     return self+1;
   }
-  inline (SuccRuntime) pred(self){
+  inline (PredRuntime) pred(self){
     return self-1;
   }
   inline (Eq) eq(self,rhs){
@@ -240,29 +244,7 @@ enum TestEnum2{
   B(float),
   C(boolean)
 }
-runtime enum TestEnum3{
-  A(score.int),
-  B(score.fixed),
-  C(score.boolean)
-}
-runtime function test_enum3(TestEnum3 enum){
-  return match enum{
-    A(num)=>num,
-    B(num)=>(num*num.scale).floor(),
-    C(bool)=>bool?1:0,
-  }
-}
-function test_enum3_exec(){
-  
-}
-/*
-上は下になる
-scoreboard players operation #tmp.1 = #tmp.0
-function namespace:main/test_enum3
-`mcfunction:namespace:main/test_enum3
-scoreboard players 
-`
-*/
+//runtime enumはないはず
 module entity_types{
   const creeper=EntityType("creeper")
   const zombie=EntityType("zombie")
@@ -272,21 +254,20 @@ class ScoreRef implements Allocate,Drop{
   string player;
   string scoreboard;
   int ref_id;
-  static int[] scoreref_holes=[];
-  static int scoreref_length=0;
   //再帰関数内部でallocated・それを含むものが再帰呼び出しを跨ぐとエラー
-  (Allocate)allocate(self){
-    if scoreref_holes.is_empty(){
-      self.ref_id=Self.scoreref_length++;
-    }else{
-      self.ref_id=Self.scoreref_holes.pop();
-    }
-    self.player="#tmp."+self.ref_id;
+  //呼び出しグラフ構築->
+  //SCC->
+  //トポロジカルソート->
+  //ルートからどのレジスタが使われるかを調べ、子供へ使用制限を伝播させる
+  //(ただし、複数箇所から呼び出される場合は全ての親の使用制限が揃うまで待つ)
+  //(ループ内では親からの使用制限を守りつつ、それ以外は自由)
+  (Allocate)allocate(self,int index){
+    self.ref_id=index;
+    self.player="#tmp."+index;
     self.scoreboard="_";
   }
   //freeは逆参照セットを使ったメモリ管理による
   (Allocate)free(self){
-    Self.scoreref_holes.push(self.ref_id);
   }
   //dropも逆参照セットを使ったメモリ管理による
   inline (Drop)drop(self){
@@ -315,7 +296,7 @@ macro TargetVersion{
 }
 macro DebugPrint{}(self,compile.Function body){
   body.ast.flat_map_replace_statements(|statement|[#ast.ReplaceAST()[
-    unsafe{print_compile($inner)},
+    unsafe{print_compile($inner)},//unsafeなのはruntimeからplainを呼び出すため
     $inner,
     ast.escape_string(statement.to_string())
   ],statement]);
@@ -337,7 +318,7 @@ macro ast.ReplaceAST{
     }
   } else if holes instanceof ast.Identifier hole {
     // 単一穴
-    let result = self.replacements;
+    let result = self.replaceTarget;
     let target = hole.name;
     template.flat_map_replace_expressions(
       |e| e.name == target ? result : e
@@ -395,9 +376,11 @@ plain function load(){
     print_runtime(">1.20.3")
   }
   let mod6=for i in 0..20{
-    if i%6=5{
+    if i%6==5{
       break true;
     }
   }else false;
   1.(Add<int>)add(2);
+  let a=score.int(5);
+  let b=a;//共有
 }
